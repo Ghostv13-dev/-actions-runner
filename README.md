@@ -1,71 +1,187 @@
-# TeamMarySy Bot
+# d1-secret-rest
+Fetch results or execute queries against a D1 CRUD REST API
 
-TeamMarySy Bot is a **Telegram-native automation system built on Cloudflare Workers**. It uses an event-driven, stateless execution model that relies on Telegram as the source of truth whenever possible. Persistent storage is intentionally minimal and limited to configuration, active workflows, scheduled jobs, support tickets, and sequential counters stored in Cloudflare Workers KV.
+## Performance
+This REST API implementation offers significantly faster performance compared to the official D1 API:
 
-## What This Bot Is
+| API | Avg. Speed | Avg. Response Time |
+|-----|------------|-------------------|
+| d1-secret-rest | 1,729 bytes/sec | 0.22 seconds |
+| Official D1 API | 574 bytes/sec | 0.79 seconds |
 
-- A Telegram Bot API integration running on Cloudflare Workers
-- Stateless per-request execution — no long-lived runtime required
-- Minimal, purposeful persistence (KV only, no full chat/message history)
-- A modular set of feature domains, each isolated from the others
-- Scheduled/cron-driven background maintenance and publishing
-
-## What This Bot Is Not
-
-This project does **not** implement natural language processing, machine learning, neural networks, sentiment analysis, continuous learning, feedback retraining, full conversation logging, multi-platform support (Slack/Discord), HR onboarding, or analytics dashboards. If you see documentation describing those capabilities, it does not reflect this implementation — please flag it for removal.
-
-## Runtime & Environment
-
-| Component | Technology |
-|---|---|
-| Runtime | Cloudflare Workers |
-| Bot Platform | Telegram Bot API |
-| Storage | Cloudflare Workers KV |
-| Scheduling | Cloudflare Cron Triggers |
-
-## Feature Modules
-
-- Panel (UI entry system)
-- Content (create/edit/publish lifecycle)
-- Community (group and join request management)
-- Support (ticketing system)
-- Buttons (inline workflow system)
-- Automation (rule engine)
-- Schedule (time-based execution)
-- Broadcast (controlled messaging)
-- Approvals (request handling system)
-- Knowledge (FAQ system)
-- Tasks (task lifecycle management)
-- Polls (Telegram poll management)
-
-## Documentation
-
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design, layers, folder structure
-- [DEPLOYMENT.md](./DEPLOYMENT.md) — Cloudflare Workers deployment environment
-- [CALLBACK_QUERIES.md](./CALLBACK_QUERIES.md) — production readiness guide for callback query handling
-- [IMPLEMENTATION_CHECKLIST.md](./IMPLEMENTATION_CHECKLIST.md) — full build-order checklist (source of truth)
-- [CI_CD.md](./CI_CD.md) — GitLab CI/CD pipeline, acceptance criteria, and risk mitigations
-- [KNOWN_IMPROVEMENTS.md](./KNOWN_IMPROVEMENTS.md) — remaining production-hardening work
+> Based on benchmark testing with identical queries. d1-secret-rest performs ~3x faster on average.
 
 ## Quick Start
-
 ```bash
-# Install dependencies
-npm install
+# Example: Get users with filtering and pagination
+curl --location 'https://d1-rest.<YOUR-IDENTIFIER>.workers.dev/rest/users?limit=2&age=25' \
+--header 'Authorization: Bearer <YOUR-SECRET-VALUE>'
 
-# Configure local secrets (do not commit)
-cp .dev.vars.example .dev.vars
-
-# Run locally with Wrangler
-npx wrangler dev
-
-# Deploy to Cloudflare Workers
-npx wrangler deploy
+# Example: Execute raw SQL query
+curl --location 'https://d1-rest.<YOUR-IDENTIFIER>.workers.dev/query' \
+--header 'Authorization: Bearer <YOUR-SECRET-VALUE>' \
+--header 'Content-Type: application/json' \
+--data '{
+    "query": "SELECT * FROM users WHERE age > ? LIMIT ?;",
+    "params": [21, 2]
+}'
 ```
 
-## Release Scope (Current Production Deployment)
+## Authentication
+All endpoints require authentication using a Bearer token:
+```bash
+--header 'Authorization: Bearer <YOUR-SECRET-VALUE>'
+```
 
-This deployment includes: Telegram webhook processing, command routing, callback query handling, join request workflow, Content module, Community module, Support module, scheduler execution, scheduled publishing, configuration management, conversation state management, support ticket management, Workers KV persistence, cron-triggered maintenance, and error handling/logging.
+## REST API Endpoints
 
-No experimental features, breaking API changes, or database migrations are include
-d in this release.
+### List Records
+```bash
+# Basic listing
+GET /rest/{table}
+
+# With filtering
+GET /rest/{table}?column_name=value
+GET /rest/{table}?age=25&status=active
+
+# With sorting
+GET /rest/{table}?sort_by=column_name&order=asc
+GET /rest/{table}?sort_by=name&order=desc
+
+# With pagination
+GET /rest/{table}?limit=10&offset=20
+
+# Combined example
+GET /rest/{table}?age=25&sort_by=name&order=desc&limit=10&offset=20
+```
+
+### Get Single Record
+```bash
+GET /rest/{table}/{id}
+```
+
+### Create Record
+```bash
+POST /rest/{table}
+Content-Type: application/json
+
+{
+    "column1": "value1",
+    "column2": "value2"
+}
+```
+
+Example:
+```bash
+POST /rest/users
+Content-Type: application/json
+
+{
+    "name": "John Doe",
+    "age": 30,
+    "email": "john@example.com"
+}
+```
+
+### Update Record
+```bash
+PATCH /rest/{table}/{id}
+Content-Type: application/json
+
+{
+    "column1": "new_value"
+}
+```
+
+Example:
+```bash
+PATCH /rest/users/123
+Content-Type: application/json
+
+{
+    "age": 31,
+    "email": "john.doe@example.com"
+}
+```
+
+### Delete Record
+```bash
+DELETE /rest/{table}/{id}
+```
+
+## Raw SQL Queries
+For more complex queries, you can use the raw SQL endpoint:
+
+```bash
+POST /query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM users WHERE age > ? AND status = ? LIMIT ?;",
+    "params": [21, "active", 10]
+}
+```
+
+## Query Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `sort_by` | Column to sort by | `sort_by=name` |
+| `order` | Sort order (asc/desc) | `order=desc` |
+| `limit` | Maximum number of records to return | `limit=10` |
+| `offset` | Number of records to skip | `offset=20` |
+| Any column name | Filter by column value | `age=25` |
+
+## Response Format
+
+### Successful Response
+```json
+{
+    "success": true,
+    "meta": {
+        "served_by": "v3-prod",
+        "served_by_region": "ENAM",
+        "served_by_primary": true,
+        "timings": {
+            "sql_duration_ms": 0.1746
+        },
+        "duration": 0.1746,
+        "changes": 0,
+        "last_row_id": 0,
+        "changed_db": false,
+        "size_after": 28672,
+        "rows_read": 2,
+        "rows_written": 0
+    },
+    "results": [
+        {
+            "user_id": 1,
+            "name": "Alice",
+            "email": "alice@example.com"
+        },
+        {
+            "user_id": 2,
+            "name": "Bob",
+            "email": "bob@example.com"
+        }
+    ]
+}
+```
+
+### Error Response
+```json
+{
+    "success": false,
+    "error": "Error message here"
+}
+```
+
+The response includes:
+- `success`: Boolean indicating if the request was successful
+- `meta`: Execution metadata including timing and database statistics
+- `results`: Array of returned records (for GET requests)
+
+## Security Notes
+- All column names and table names are sanitized to prevent SQL injection
+- Only alphanumeric characters and underscores are allowed in identifiers
+- Authentication is required for all endpoints
